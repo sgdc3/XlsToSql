@@ -16,7 +16,7 @@ public class XlsToSqlDocument {
 
     // TODO: find a better way to share this value between methods
     // Contains the columns data (Name, Type)
-    Map<String, String> columns;
+    private Map<String, String> columns;
     
     private StringBuilder output;
     
@@ -36,7 +36,7 @@ public class XlsToSqlDocument {
     }
     
     private String generateRowInsert(String tableName, Row row) {
-        List<String> cellContents = new ArrayList<String>();
+        List<String> cellContents = new ArrayList<>();
         
         List<Cell> cells = new ArrayList<>();
         Iterator<Cell> cellIterator = row.cellIterator();
@@ -52,7 +52,7 @@ public class XlsToSqlDocument {
             }
             
             int cellType = cell.getCellType();
-            String cellContent = null;
+            String cellContent;
             switch(cellType) {
                 default:
                 case Cell.CELL_TYPE_ERROR:
@@ -129,7 +129,7 @@ public class XlsToSqlDocument {
             columns.put(columnName, columnType);
         }
         
-        List<String> columnsSqlList = new ArrayList<String>();
+        List<String> columnsSqlList = new ArrayList<>();
         
         for(String columnName : columns.keySet()) {
             String columnType = columns.get(columnName);
@@ -137,7 +137,7 @@ public class XlsToSqlDocument {
         }
         
         String columnsSql = Utils.stringCollectionToString(columnsSqlList);
-        
+
         String result = TABLE_INIT;
         result = result.replace("%table_name%", tableName);
         result = result.replace("%columns%", columnsSql);

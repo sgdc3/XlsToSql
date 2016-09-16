@@ -28,12 +28,12 @@ public class XlsToSqlConverter {
         for (InputStream source : sources) {
             HSSFWorkbook workbook = new HSSFWorkbook(source);
             
-            List<Sheet> sheets = new ArrayList<Sheet>();
+            List<Sheet> sheets = new ArrayList<>();
             workbook.iterator().forEachRemaining(sheets::add);
             for(Sheet sheet : sheets) {
                 String sheetName = sheet.getSheetName();
                 
-                List<Row> rows = new ArrayList<Row>();
+                List<Row> rows = new ArrayList<>();
                 sheet.rowIterator().forEachRemaining(rows::add);
                 Row headerRow = rows.remove(0);
                 Row typesRow = rows.remove(0);
