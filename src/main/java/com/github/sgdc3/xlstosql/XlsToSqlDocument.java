@@ -87,7 +87,7 @@ public class XlsToSqlDocument {
         List<List<String>> rowValues = new ArrayList<>();
 
         // For every row
-        for(Row row : rows) {
+        for (Row row : rows) {
             List<String> cellValues = new ArrayList<>();
 
             int cellCount = 0;

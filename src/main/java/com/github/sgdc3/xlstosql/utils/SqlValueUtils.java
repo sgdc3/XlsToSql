@@ -14,6 +14,6 @@ public class SqlValueUtils {
         if (value) {
             return "1";
         }
-        return  "0";
+        return "0";
     }
 }
