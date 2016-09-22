@@ -2,7 +2,7 @@ package com.github.sgdc3.xlstosql;
 
 import com.github.sgdc3.xlstosql.utils.CellUtils;
 import com.github.sgdc3.xlstosql.utils.SqlValueUtils;
-import com.sun.deploy.util.StringUtils;
+import com.github.sgdc3.xlstosql.utils.StringUtils;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 
