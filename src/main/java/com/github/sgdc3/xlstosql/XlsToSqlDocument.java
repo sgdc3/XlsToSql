@@ -1,151 +1,178 @@
 package com.github.sgdc3.xlstosql;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
+import com.github.sgdc3.xlstosql.utils.CellUtils;
+import com.github.sgdc3.xlstosql.utils.SqlValueUtils;
+import com.sun.deploy.util.StringUtils;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 
-public class XlsToSqlDocument {
-    
-    private static final String TABLE_INIT = "CREATE TABLE IF NOT EXISTS %table_name% (%columns%);\r\n";
-    private static final String INSERT_ROW = "INSERT INTO %table_name% (%columns%) VALUES (%values%);\r\n";
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
-    // TODO: find a better way to share this value between methods
-    // Contains the columns data (Name, Type)
-    private Map<String, String> columns;
-    
+public class XlsToSqlDocument {
+
+    // Constants
+    private final static String NEW_LINE = System.getProperty("line.separator");
+
+    // SQL statements
+    private final static String TABLE_INIT = "CREATE TABLE IF NOT EXISTS %table_name% (%columns%);" + NEW_LINE;
+    private final static String INSERT_ROW = "INSERT INTO %table_name% (%columns%) VALUES (%values%);" + NEW_LINE;
+
+    // Query builder
     private StringBuilder output;
-    
+
     public XlsToSqlDocument() {
         output = new StringBuilder();
-        // We need to use a LinkedHashMap because we need to keep the right order of the elements
-        columns = new LinkedHashMap<>();
     }
-    
+
     public void createTable(String tableName, Row headerRow, Row typesRow, List<Row> rows) throws XlsParseException {
         StringBuilder tableBuilder = new StringBuilder();
-        tableBuilder.append(generateTableHeader(tableName, headerRow, typesRow));
-        for(Row row : rows) {
-            tableBuilder.append(generateRowInsert(tableName, row));
+
+        // Obtain columns data (Name, Type)
+        Map<String, String> columnsData = parseColumns(headerRow, typesRow);
+        // Obtain the row data (List<List<Value>>)
+        List<List<String>> rowsData = parseRows(columnsData, rows);
+
+        // Generate the header and the DB entries
+        tableBuilder.append(generateHeader(tableName, columnsData));
+        for (List<String> row : rowsData) {
+            tableBuilder.append(generateRow(tableName, columnsData.keySet(), row));
         }
+
+        // Append the result
         output.append(tableBuilder);
     }
-    
-    private String generateRowInsert(String tableName, Row row) {
-        List<String> cellContents = new ArrayList<>();
-        
-        List<Cell> cells = new ArrayList<>();
-        Iterator<Cell> cellIterator = row.cellIterator();
-        cellIterator.forEachRemaining(cells::add);
-        
-        int cellCount = 0;
-        
-        for(Cell cell : cells) {
-            
-            // Ignore cells outside of the column range
-            if(cellCount == columns.size()) {
-                break;
+
+    private Map<String, String> parseColumns(Row headerRow, Row typesRow) throws XlsParseException {
+        // We need to use a LinkedHashMap because we need to keep the right order of the elements
+        Map<String, String> columns = new LinkedHashMap<>();
+
+        Iterator<Cell> headerIterator = headerRow.cellIterator();
+        Iterator<Cell> typesIterator = typesRow.cellIterator();
+
+        // Parse all the columns
+        while (headerIterator.hasNext()) {
+            Cell nameCell = headerIterator.next();
+
+            if (nameCell.getCellType() != Cell.CELL_TYPE_STRING) {
+                throw new XlsParseException("The first row (which contains the column names) must have only string values! Error at (" + CellUtils.printCellCoordinates(nameCell) + ")");
             }
-            
-            int cellType = cell.getCellType();
-            String cellContent;
-            switch(cellType) {
-                default:
-                case Cell.CELL_TYPE_ERROR:
-                case Cell.CELL_TYPE_BLANK:
-                    cellContent = "NULL";
+            String columnName = nameCell.getStringCellValue().trim().replace(" ", "");
+
+            if (!typesIterator.hasNext()) {
+                throw new XlsParseException("The second row must define the type of every column!");
+            }
+            Cell typeCell = typesIterator.next();
+
+            if (typeCell.getCellType() != Cell.CELL_TYPE_STRING) {
+                throw new XlsParseException("The second row (which contains the column types) must have only string values! Error at (" + CellUtils.printCellCoordinates(typeCell) + ")");
+            }
+            String columnType = typeCell.getStringCellValue().trim();
+
+            if (columns.containsKey(columnName)) {
+                throw new XlsParseException("Found multiple column with the same name! Error at column " + columnName);
+            }
+
+            columns.put(columnName, columnType);
+        }
+
+        return columns;
+    }
+
+    private List<List<String>> parseRows(Map<String, String> columnsData, List<Row> rows) {
+        List<List<String>> rowValues = new ArrayList<>();
+
+        // For every row
+        for(Row row : rows) {
+            List<String> cellValues = new ArrayList<>();
+
+            int cellCount = 0;
+            Iterator<Cell> cellIterator = row.cellIterator();
+
+            // For every cell
+            while (cellIterator.hasNext()) {
+                Cell cell = cellIterator.next();
+
+                // Ignore cells outside of the column range
+                if (cellCount == columnsData.size()) {
                     break;
-                case Cell.CELL_TYPE_BOOLEAN:
-                    if(cell.getBooleanCellValue()) {
-                        cellContent = "1";
+                }
+
+                int cellType = cell.getCellType();
+                String cellContent;
+
+                // Parse the value according to the type
+                switch (cellType) {
+                    default:
+                    case Cell.CELL_TYPE_ERROR:
+                    case Cell.CELL_TYPE_BLANK:
+                        cellContent = "NULL";
                         break;
-                    }
-                    cellContent = "0";
-                    break;
-                case Cell.CELL_TYPE_FORMULA:
-                    cellContent = "'" + cell.getCellFormula().replace("'", "''").replace("\r\n", "").replace("\n", "").replace("\r", "") + "'";
-                    break;
-                case Cell.CELL_TYPE_STRING:
-                    cellContent = "'" + cell.getStringCellValue().replace("'", "''").replace("\r\n", "").replace("\n", "").replace("\r", "") + "'";
-                    break;
-                case Cell.CELL_TYPE_NUMERIC:
-                    cellContent = Double.toString(cell.getNumericCellValue()).replaceAll(",", "");
-                    break;
+                    case Cell.CELL_TYPE_BOOLEAN:
+                        cellContent = SqlValueUtils.prepareBoolean(cell.getBooleanCellValue());
+                        break;
+                    case Cell.CELL_TYPE_FORMULA:
+                        cellContent = SqlValueUtils.prepareString(cell.getCellFormula());
+                        break;
+                    case Cell.CELL_TYPE_STRING:
+                        cellContent = SqlValueUtils.prepareString(cell.getStringCellValue());
+                        break;
+                    case Cell.CELL_TYPE_NUMERIC:
+                        cellContent = SqlValueUtils.prepareNumber(cell.getNumericCellValue());
+                        break;
+                }
+
+                cellValues.add(cellContent);
+                cellCount++;
             }
-            
-            cellContents.add(cellContent);
-            cellCount++;
+
+            // Consider missing cells as null
+            while (cellValues.size() < columnsData.size()) {
+                cellValues.add("NULL");
+            }
+
+            rowValues.add(cellValues);
         }
-        
-        // Consider missing cells as null
-        while(cellContents.size() < columns.size()) {
-            cellContents.add("NULL");
+        return rowValues;
+    }
+
+    private String generateHeader(String tableName, Map<String, String> columns) {
+        // Join the column names with the types
+        List<String> columnsSqlList = new ArrayList<>();
+        for (String columnName : columns.keySet()) {
+            String columnType = columns.get(columnName);
+            columnsSqlList.add(columnName + " " + columnType);
         }
-        
-        String rowValues = Utils.stringCollectionToString(cellContents);
-        String columnNames = Utils.stringCollectionToString(columns.keySet());
-        
+
+        // Join the columns
+        String columnsSql = StringUtils.join(columnsSqlList, ",");
+
+        // Replace variables in the SQL statement
+        String result = TABLE_INIT;
+        result = result.replace("%table_name%", tableName);
+        result = result.replace("%columns%", columnsSql);
+        return result;
+    }
+
+    private String generateRow(String tableName, Collection<String> columns, List<String> row) {
+        // Join the values
+        String rowValues = StringUtils.join(row, ",");
+        String columnNames = StringUtils.join(columns, ",");
+
+        // Replace variables in the SQL statement
         String result = INSERT_ROW;
         result = result.replace("%table_name%", tableName);
         result = result.replace("%columns%", columnNames);
         result = result.replace("%values%", rowValues);
-        
         return result;
     }
-    
-    private String generateTableHeader(String tableName, Row headerRow, Row typesRow) throws XlsParseException {
-        
-        Iterator<Cell> headerIterator = headerRow.cellIterator();
-        Iterator<Cell> typesIterator = typesRow.cellIterator();
-        
-        columns.clear();
-        
-        while(headerIterator.hasNext()) {
-            Cell nameCell = headerIterator.next();
-            
-            if(nameCell.getCellType() != Cell.CELL_TYPE_STRING) {
-                throw new XlsParseException("The first row (which contains the column names) must have only string values! Error at (" + Utils.printCellCoordinates(nameCell) + ")");
-            }
-            String columnName = nameCell.getStringCellValue().trim().replace(" ", "");
-            
-            if(!typesIterator.hasNext()) {
-                throw new XlsParseException("The second row must define the type of every column!");
-            }
-            Cell typeCell = typesIterator.next();
-            
-            if(typeCell.getCellType() != Cell.CELL_TYPE_STRING) {
-                throw new XlsParseException("The second row (which contains the column types) must have only string values! Error at (" + Utils.printCellCoordinates(typeCell) + ")");
-            }
-            String columnType = typeCell.getStringCellValue().trim();
-            
-            if(columns.containsKey(columnName)) {
-                throw new XlsParseException("Found multiple column with the same name! Error at column " + columnName);
-            }
-            
-            columns.put(columnName, columnType);
-        }
-        
-        List<String> columnsSqlList = new ArrayList<>();
-        
-        for(String columnName : columns.keySet()) {
-            String columnType = columns.get(columnName);
-            columnsSqlList.add(columnName + " " + columnType);
-        }
-        
-        String columnsSql = Utils.stringCollectionToString(columnsSqlList);
 
-        String result = TABLE_INIT;
-        result = result.replace("%table_name%", tableName);
-        result = result.replace("%columns%", columnsSql);
-        
-        return result;
-    }
-    
-    public String getText() {
+    // Obtain the result
+    public String toString() {
         return output.toString();
     }
 }
