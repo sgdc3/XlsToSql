@@ -2,7 +2,6 @@ package com.github.sgdc3.xlstosql;
 
 import com.github.sgdc3.xlstosql.utils.CellUtils;
 import com.github.sgdc3.xlstosql.utils.SqlValueUtils;
-import com.github.sgdc3.xlstosql.utils.StringUtils;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 
@@ -149,7 +148,7 @@ public class XlsToSqlDocument {
         }
 
         // Join the columns
-        String columnsSql = StringUtils.join(columnsSqlList, ",");
+        String columnsSql = String.join(",", columnsSqlList);
 
         // Replace variables in the SQL statement
         String result = TABLE_INIT;
@@ -160,8 +159,8 @@ public class XlsToSqlDocument {
 
     private String generateRow(String tableName, Collection<String> columns, List<String> row) {
         // Join the values
-        String rowValues = StringUtils.join(row, ",");
-        String columnNames = StringUtils.join(columns, ",");
+        String rowValues = String.join( ",", row);
+        String columnNames = String.join(",", columns);
 
         // Replace variables in the SQL statement
         String result = INSERT_ROW;
